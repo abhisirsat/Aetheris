@@ -11,8 +11,9 @@ import * as THREE from 'three';
 import { syncThreeCameraWithCesium } from '../utils/coordinateSync';
 import { WindParticles } from './WindParticles';
 import { PrecipitationSystem } from './PrecipitationSystem';
-import cloudVolumeVert from '../shaders/cloudVolume.vert.glsl?raw';
-import cloudVolumeFrag from '../shaders/cloudVolume.frag.glsl?raw';
+import { CloudSystem } from './CloudSystem.js';
+import useTimeStore from '../store/useTimeStore';
+import useAtmosphereStore from '../store/useAtmosphereStore';
 
 const GLOBE_RADIUS = 6371000;
 
@@ -115,49 +116,24 @@ export class AtmosphericCanvas {
 
   /**
    * @function _initClouds
-   * @description Creates the cloud volume shader mesh on a globe-covering sphere.
+   * @description Initializes the satellite cloud texture sphere.
    * @returns {void}
    */
   _initClouds() {
-    /**
-     * @param {number} value - Single float coverage value [0,1].
-     * @returns {THREE.DataTexture}
-     */
-    const makeCloudTex = (value) => {
-      const data = new Float32Array([value]);
-      // THREE.RedFormat → use RFormat which is the correct constant in r160+
-      const tex = new THREE.DataTexture(data, 1, 1, THREE.RedFormat, THREE.FloatType);
-      tex.needsUpdate = true;
-      return tex;
-    };
-
-    this.cloudUniforms = {
-      time:           { value: 0 },
-      cloudCoverLow:  { value: makeCloudTex(0.4) },
-      cloudCoverMid:  { value: makeCloudTex(0.3) },
-      cloudCoverHigh: { value: makeCloudTex(0.2) },
-      lowAltitude:    { value: 1000.0 },
-      midAltitude:    { value: 5000.0 },
-      highAltitude:   { value: 10000.0 },
-      sunDirection:   { value: new THREE.Vector3(1, 0, 0) },
-      extinction:     { value: 0.8 },
-      globeRadius:    { value: GLOBE_RADIUS },
-    };
-
-    const geo = new THREE.SphereGeometry(GLOBE_RADIUS + 6000, 64, 32);
-    const mat = new THREE.ShaderMaterial({
-      vertexShader:   cloudVolumeVert,
-      fragmentShader: cloudVolumeFrag,
-      uniforms:       this.cloudUniforms,
-      transparent:    true,
-      depthWrite:     false,
-      side:           THREE.FrontSide,
-      blending:       THREE.NormalBlending,
+    this.cloudSystem = new CloudSystem(this.scene, {
+      segments: 128,
+      opacity: 0.85,
+      threshold: 0.38,
+      softness: 0.12,
+      quality: useAtmosphereStore.getState().cloudQuality || 'medium',
     });
 
-    this.cloudMesh = new THREE.Mesh(geo, mat);
-    this.cloudMesh.frustumCulled = false;
-    this.scene.add(this.cloudMesh);
+    // Load today's clouds immediately on startup
+    const initialTimestamp = useTimeStore.getState().currentTimestamp;
+    this.cloudSystem.loadTextureForDate(initialTimestamp);
+
+    // Expose to window for debugging (remove in production)
+    if (import.meta.env.DEV) window._cloudSystem = this.cloudSystem;
   }
 
   /**
@@ -205,7 +181,7 @@ export class AtmosphericCanvas {
       this.layersVisible.wind = visible;
     }
     if (layer === 'clouds') {
-      this.cloudMesh.visible = visible;
+      this.cloudSystem.setVisible(visible);
       this.layersVisible.clouds = visible;
     }
     if (layer === 'precipitation') {
@@ -240,7 +216,9 @@ export class AtmosphericCanvas {
    * @returns {void}
    */
   tick(deltaTime) {
-    this.cloudUniforms.time.value += deltaTime;
+    if (this.cloudSystem && this.layersVisible.clouds) {
+      this.cloudSystem.tick(deltaTime);
+    }
 
     if (this.layersVisible.wind) {
       this.windParticles.tick(deltaTime);
@@ -260,8 +238,7 @@ export class AtmosphericCanvas {
     this._resizeObs.disconnect();
     this.windParticles.dispose();
     this.precipitation.dispose();
-    this.cloudMesh.geometry.dispose();
-    this.cloudMesh.material.dispose();
+    this.cloudSystem.dispose();
     this.renderer.dispose();
     if (this.canvas.parentNode) this.canvas.parentNode.removeChild(this.canvas);
   }

@@ -1,8 +1,8 @@
 /**
- * @file cloudVolume.vert.glsl
- * @module CloudVolume
- * @description Pass-through vertex shader for the cloud volume full-screen quad.
- * @author Aetheris 4D
+ * @shader cloudVolume.vert
+ * @description Passthrough vertex shader for the cloud sphere.
+ *              Passes UV coordinates to the fragment shader for texture sampling.
+ *              No custom vertex displacement — the sphere geometry handles altitude.
  */
 
 varying vec2 vUv;

@@ -32,10 +32,10 @@ export default function App() {
   const [initialized,  setInitialized]  = useState(false);
   const [viewer,       setViewer]       = useState(null);
 
-  const { setParticleTier } = useAtmosphereStore();
+  const { setParticleTier, setCloudQuality } = useAtmosphereStore();
 
   // Wire time sync hook (auto-play + debounced weather refetch)
-  useTimeSync(viewer);
+  useTimeSync(viewer, atmosphericRef);
 
   // ── Bootstrap after Cesium viewer mounts ─────────────────────────
   const bootstrap = useCallback(async () => {
@@ -47,6 +47,8 @@ export default function App() {
     // 1. Benchmark → pick particle tier
     const { tier, textureSize } = await runPerformanceBenchmark();
     setParticleTier(tier);
+    const cloudQualityMap = { high: 'high', medium: 'medium', low: 'low' };
+    setCloudQuality(cloudQualityMap[tier]);
 
     // 2. Create Three.js atmospheric overlay
     const container = document.getElementById('cesium-container');

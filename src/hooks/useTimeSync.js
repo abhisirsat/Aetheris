@@ -20,9 +20,10 @@ const DEBOUNCE_MS = 500;
  * @description Subscribes to timestamp changes, triggers weather refetch on
  *              boundary crossing, and drives playback auto-advance.
  * @param {import('cesium').Viewer | null} viewer - The Cesium viewer (for bounds extraction).
+ * @param {React.MutableRefObject | null} atmosphericRef - Ref to the AtmosphericCanvas instance
  * @returns {void}
  */
-export function useTimeSync(viewer) {
+export function useTimeSync(viewer, atmosphericRef) {
   const debounceRef       = useRef(null);
   const lastFetchedBound  = useRef(-1);
   const playIntervalRef   = useRef(null);
@@ -110,4 +111,26 @@ export function useTimeSync(viewer) {
       if (debounceRef.current) clearTimeout(debounceRef.current);
     };
   }, [viewer]);
+
+  // ── Cloud texture refresh ─────────────────────────────────────────
+  // Only re-fetch when the DATE changes (not just the hour).
+  // Cloud satellite imagery is daily, not hourly.
+  const prevCloudDateRef = useRef(null);
+
+  useEffect(() => {
+    const unsubscribe = useTimeStore.subscribe((state) => {
+      const timestamp = state.currentTimestamp;
+      import('../services/gibsService.js').then(({ formatGIBSDate }) => {
+        const newDate = formatGIBSDate(timestamp);
+        if (newDate !== prevCloudDateRef.current) {
+          prevCloudDateRef.current = newDate;
+          const cloudSys = atmosphericRef?.current?.cloudSystem;
+          if (cloudSys) {
+            cloudSys.loadTextureForDate(timestamp);
+          }
+        }
+      });
+    });
+    return unsubscribe;
+  }, [atmosphericRef]);
 }

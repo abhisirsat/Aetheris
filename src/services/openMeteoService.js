@@ -100,19 +100,19 @@ function windUV(speed, dirDeg) {
 }
 
 /**
- * @function fetchSinglePoint
- * @description Fetches hourly weather data for a single lat/lon point from Open-Meteo.
- * @param {number} lat - Latitude in degrees.
- * @param {number} lon - Longitude in degrees.
+ * @function fetchBatchPoints
+ * @description Fetches hourly weather data for multiple lat/lon points from Open-Meteo in a single request.
+ * @param {number[]} lats - Array of latitudes.
+ * @param {number[]} lons - Array of longitudes.
  * @param {boolean} [historical=false] - Whether to use the archive endpoint.
- * @param {string} [startDate] - ISO date string for archive start (e.g. '2020-01-01').
- * @param {string} [endDate] - ISO date string for archive end (e.g. '2020-01-31').
- * @returns {Promise<WeatherPoint>} Normalized weather point data.
+ * @param {string} [startDate] - ISO date string for archive start.
+ * @param {string} [endDate] - ISO date string for archive end.
+ * @returns {Promise<WeatherPoint[]>} Normalized weather point data array.
  */
-async function fetchSinglePoint(lat, lon, historical = false, startDate, endDate) {
+async function fetchBatchPoints(lats, lons, historical = false, startDate, endDate) {
   const params = {
-    latitude: lat,
-    longitude: lon,
+    latitude: lats.join(','),
+    longitude: lons.join(','),
     hourly: HOURLY_PARAMS,
     timezone: 'auto',
     models: 'best_match',
@@ -128,25 +128,43 @@ async function fetchSinglePoint(lat, lon, historical = false, startDate, endDate
   }
 
   const response = await axios.get(url, { params, timeout: 15000 });
-  const h = response.data.hourly;
+  const dataArray = Array.isArray(response.data) ? response.data : [response.data];
 
-  return {
-    lat,
-    lon,
-    temperature_2m: h.temperature_2m ?? [],
-    windspeed_10m: h.windspeed_10m ?? [],
-    winddirection_10m: h.winddirection_10m ?? [],
-    precipitation: h.precipitation ?? [],
-    snowfall: h.snowfall ?? [],
-    cloudcover: h.cloudcover ?? [],
-    cloudcover_low: h.cloudcover_low ?? [],
-    cloudcover_mid: h.cloudcover_mid ?? [],
-    cloudcover_high: h.cloudcover_high ?? [],
-    windspeed_850hPa: h.windspeed_850hPa ?? [],
-    winddirection_850hPa: h.winddirection_850hPa ?? [],
-    windspeed_500hPa: h.windspeed_500hPa ?? [],
-    winddirection_500hPa: h.winddirection_500hPa ?? [],
-  };
+  return dataArray.map((data, index) => {
+    const h = data.hourly;
+    return {
+      lat: lats[index],
+      lon: lons[index],
+      temperature_2m: h.temperature_2m ?? [],
+      windspeed_10m: h.windspeed_10m ?? [],
+      winddirection_10m: h.winddirection_10m ?? [],
+      precipitation: h.precipitation ?? [],
+      snowfall: h.snowfall ?? [],
+      cloudcover: h.cloudcover ?? [],
+      cloudcover_low: h.cloudcover_low ?? [],
+      cloudcover_mid: h.cloudcover_mid ?? [],
+      cloudcover_high: h.cloudcover_high ?? [],
+      windspeed_850hPa: h.windspeed_850hPa ?? [],
+      winddirection_850hPa: h.winddirection_850hPa ?? [],
+      windspeed_500hPa: h.windspeed_500hPa ?? [],
+      winddirection_500hPa: h.winddirection_500hPa ?? [],
+    };
+  });
+}
+
+/**
+ * @function fetchSinglePoint
+ * @description Fetches hourly weather data for a single lat/lon point from Open-Meteo.
+ * @param {number} lat - Latitude in degrees.
+ * @param {number} lon - Longitude in degrees.
+ * @param {boolean} [historical=false] - Whether to use the archive endpoint.
+ * @param {string} [startDate] - ISO date string for archive start.
+ * @param {string} [endDate] - ISO date string for archive end.
+ * @returns {Promise<WeatherPoint>} Normalized weather point data.
+ */
+async function fetchSinglePoint(lat, lon, historical = false, startDate, endDate) {
+  const results = await fetchBatchPoints([lat], [lon], historical, startDate, endDate);
+  return results[0];
 }
 
 /**
@@ -170,16 +188,16 @@ export async function fetchForecastGrid(bounds) {
   const latStep = (bounds.north - bounds.south) / (GRID_SIZE - 1);
   const lonStep = (bounds.east - bounds.west) / (GRID_SIZE - 1);
 
-  const fetchPromises = [];
+  const lats = [];
+  const lons = [];
   for (let row = 0; row < GRID_SIZE; row++) {
     for (let col = 0; col < GRID_SIZE; col++) {
-      const lat = bounds.south + row * latStep;
-      const lon = bounds.west + col * lonStep;
-      fetchPromises.push(fetchSinglePoint(lat, lon));
+      lats.push(bounds.south + row * latStep);
+      lons.push(bounds.west + col * lonStep);
     }
   }
 
-  const points = await Promise.all(fetchPromises);
+  const points = await fetchBatchPoints(lats, lons);
 
   /** @type {WeatherGrid} */
   const grid = {

@@ -242,41 +242,74 @@ export default function ControlPanel({ atmosphericCanvasRef }) {
       <SectionHeader icon={Cloud} title="Clouds" expanded={sections.cloud} onToggle={() => toggleSection('cloud')} />
       {sections.cloud && layersVisible.clouds && (
         <div style={{ padding: '8px 0' }}>
-          {['low', 'mid', 'high'].map(band => (
-            <LabeledSlider
-              key={band}
-              label={`${band.charAt(0).toUpperCase() + band.slice(1)} clouds`}
-              value={cloudOpacity[band]}
-              min={0}
-              max={100}
-              step={1}
-              onChange={v => setCloudOpacity(p => ({ ...p, [band]: v }))}
-              format={v => `${v}%`}
-            />
-          ))}
-          <div style={{ fontSize: 10, color: 'rgba(255,255,255,0.4)', fontFamily: '"Space Mono", monospace', marginBottom: 4 }}>
-            Ray Steps (quality)
+          <LabeledSlider
+            label="Opacity"
+            value={atmosphericCanvasRef.current?.cloudSystem?.options?.opacity ?? 0.85}
+            min={0}
+            max={1}
+            step={0.05}
+            onChange={v => {
+              if (atmosphericCanvasRef.current?.cloudSystem) {
+                atmosphericCanvasRef.current.cloudSystem.setOpacity(v);
+              }
+              // Force re-render to update slider value
+              setCloudOpacity(p => ({ ...p, _force: v }));
+            }}
+            format={v => `${Math.round(v * 100)}%`}
+          />
+
+          <LabeledSlider
+            label="Coverage Threshold"
+            value={atmosphericCanvasRef.current?.cloudSystem?.options?.threshold ?? 0.38}
+            min={0.1}
+            max={0.7}
+            step={0.02}
+            onChange={v => {
+              if (atmosphericCanvasRef.current?.cloudSystem) {
+                atmosphericCanvasRef.current.cloudSystem.setThreshold(v);
+              }
+              // Force re-render to update slider value
+              setCloudOpacity(p => ({ ...p, _force: v }));
+            }}
+            format={v => v.toFixed(2)}
+          />
+
+          <div style={{ fontSize: 10, color: 'rgba(255,255,255,0.45)', fontFamily: '"Space Mono", monospace', marginBottom: 4 }}>
+            Texture Quality
           </div>
-          <div style={{ display: 'flex', gap: 4 }}>
-            {[16, 32, 64].map(steps => (
-              <button
-                key={steps}
-                onClick={() => setRaySteps(steps)}
-                style={{
-                  flex: 1,
-                  fontSize: 10,
-                  fontFamily: '"Space Mono", monospace',
-                  padding: '4px 0',
-                  borderRadius: 4,
-                  cursor: 'pointer',
-                  border: `1px solid ${raySteps === steps ? 'rgba(0,255,255,0.6)' : 'rgba(255,255,255,0.1)'}`,
-                  background: raySteps === steps ? 'rgba(0,255,255,0.1)' : 'none',
-                  color: raySteps === steps ? '#00ffff' : 'rgba(255,255,255,0.4)',
-                }}
-              >
-                {steps}
-              </button>
-            ))}
+          <select
+            defaultValue={atmosphericCanvasRef.current?.cloudSystem?.options?.quality ?? 'medium'}
+            onChange={(e) => {
+              if (atmosphericCanvasRef.current?.cloudSystem) {
+                const cloudSys = atmosphericCanvasRef.current.cloudSystem;
+                cloudSys.options.quality = e.target.value;
+                cloudSys.loadedDate = null; // Force reload at new quality
+                import('../../store/useTimeStore').then(m => {
+                   cloudSys.loadTextureForDate(m.default.getState().currentTimestamp);
+                });
+              }
+            }}
+            style={{
+              width: '100%',
+              background: 'rgba(0,0,0,0.5)',
+              border: '1px solid rgba(0,255,255,0.2)',
+              borderRadius: 6,
+              color: '#e0e8ff',
+              padding: '5px 8px',
+              fontSize: 11,
+              fontFamily: '"Space Mono", monospace',
+              marginBottom: 10,
+            }}
+          >
+            <option value="low">Low (1K)</option>
+            <option value="medium">Medium (2K)</option>
+            <option value="high">High (4K)</option>
+          </select>
+
+          <div style={{ fontSize: 10, color: 'rgba(255,255,255,0.4)', fontFamily: '"Space Mono", monospace' }}>
+            {atmosphericCanvasRef.current?.cloudSystem?.loadedDate
+              ? `Satellite: ${atmosphericCanvasRef.current.cloudSystem.loadedDate}`
+              : 'Loading satellite imagery...'}
           </div>
         </div>
       )}

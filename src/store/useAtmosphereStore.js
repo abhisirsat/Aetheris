@@ -34,6 +34,7 @@ import { create } from 'zustand';
 /** @type {import('zustand').UseBoundStore<import('zustand').StoreApi<AtmosphereState>>} */
 const useAtmosphereStore = create((set) => ({
   particleTier: 'high',
+  cloudQuality: 'medium',
   currentFPS: 60,
   layersVisible: {
     wind: true,
@@ -60,6 +61,13 @@ const useAtmosphereStore = create((set) => ({
    * @param {ParticleTier} tier - The desired particle quality tier.
    */
   setParticleTier: (tier) => set({ particleTier: tier }),
+
+  /**
+   * @function setCloudQuality
+   * @description Sets the GIBS cloud texture quality tier (low/medium/high).
+   * @param {'low'|'medium'|'high'} quality - The desired cloud quality tier.
+   */
+  setCloudQuality: (quality) => set({ cloudQuality: quality }),
 
   /**
    * @function updateFPS
